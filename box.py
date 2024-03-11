@@ -11,7 +11,7 @@ MICRO = 0.000001
 pcb = pcbnew.LoadBoard(sys.argv[1])
 
 SCREW_HOLE_RADIUS = 1.2
-SOLDER_BLOB_PADDING = 0.8
+SOLDER_BLOB_PADDING = 1.0
 
 xx = []
 yy = []
@@ -24,15 +24,22 @@ bbox = pcb.ComputeBoundingBox()
 #ic(bbox.GetHeight())
 #ic(bbox.GetOrigin())
 
+units = pcbnew.EDA_UNITS_MILLIMETRES
+uProvider = pcbnew.UNITS_PROVIDER(pcbnew.pcbIUScale, units)
+
 #from IPython import embed; embed()
 
 for pad in pcb.GetPads():
-  description = pad.GetParent().GetDescription()
-  if "SMD Solder Jumper" in description and pad.GetParent().GetLayerName() == "B.Cu":
+  f = pad.GetParentFootprint()
+  fp = f.GetFieldByName("Footprint")
+  description = fp.GetText()
+
+  #print(description)
+  if "SolderJumper" in description and pad.GetParent().GetLayerName() == "B.Cu":
     padtypes.append("jumper")
   elif pad.GetDrillSize()[0] == 0:
     padtypes.append("smd")
-  elif "Mounting Hole" in description:
+  elif "MountingHole" in description:
     if pad.GetDrillSize()[0] < 1000000:
       continue
     padtypes.append("hole")
