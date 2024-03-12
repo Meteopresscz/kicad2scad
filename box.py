@@ -17,6 +17,7 @@ xx = []
 yy = []
 radiuses = []
 padtypes = []
+comments = []
 widths = []
 heights = []
 
@@ -34,7 +35,10 @@ for pad in pcb.GetPads():
   fp = f.GetFieldByName("Footprint")
   description = fp.GetText()
 
-  #print(description)
+  value = f.GetFieldByName("Value").GetText()
+  reference = f.GetFieldByName("Reference").GetText()
+  comment = f"{reference}-{value}"
+
   if "SolderJumper" in description and pad.GetParent().GetLayerName() == "B.Cu":
     padtypes.append("jumper")
   elif pad.GetDrillSize()[0] == 0:
@@ -49,6 +53,9 @@ for pad in pcb.GetPads():
   xx.append(pad.GetCenter()[0]*MICRO)
   yy.append(-pad.GetCenter()[1]*MICRO)
   radiuses.append(pad.GetBoundingRadius()*MICRO)
+  comments.append(comment)
+
+  #print(padtypes[-1], xx[-1], yy[-1], description, comment)
 
   widths.append(pad.GetBoundingBox().GetWidth()*MICRO)
   heights.append(pad.GetBoundingBox().GetHeight()*MICRO)
@@ -79,8 +86,7 @@ if sys.stdout.isatty():
   plt.scatter(xx,yy, s=sizes, c=colors)
   plt.show()
 
-
-for x,y,radius,w,h,padtype in zip(xx,yy,radiuses,widths,heights,padtypes):
+for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes,comments):
 
   if padtype == "smd":
     continue
@@ -90,13 +96,14 @@ for x,y,radius,w,h,padtype in zip(xx,yy,radiuses,widths,heights,padtypes):
   if padtype == "hole":
     r = SCREW_HOLE_RADIUS
     z = -5
-    print("translate([%f,%f,%f]) cylinder(r=%f,h=20);"%(x,y_corrected,z,r))
+    print("translate([%f,%f,%f]) cylinder(r=%f,h=20);"%(x,y_corrected,z,r), end="")
   else:
     color = ""
     if padtype == "jumper":
       color = "color([1,0,0]) "
     z = 5
-    print(color + "translate([%f,%f,%f]) cube([%f,%f,5], center=true);"%(x,y_corrected,z,w+SOLDER_BLOB_PADDING,h+SOLDER_BLOB_PADDING))
+    print(color + "translate([%f,%f,%f]) cube([%f,%f,5], center=true);"%(x,y_corrected,z,w+SOLDER_BLOB_PADDING,h+SOLDER_BLOB_PADDING), end="")
+  print(f" // {comment}")
 
 """
 bbox = pcb.GetBoard().GetBoundingBox()
