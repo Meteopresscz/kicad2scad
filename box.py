@@ -43,8 +43,8 @@ for pad in pcb.GetPads():
     padtypes.append("jumper")
   elif pad.GetDrillSize()[0] == 0:
     padtypes.append("smd")
-  elif "MountingHole" in description:
-    if pad.GetDrillSize()[0] < 1000000:
+  elif "MountingHole" in description or "MountingHole" in value:
+    if pad.GetDrillSize()[0] < 1000000: # footprints MountingHole_3.2mm_M3_Pad_Via would generate lots of small holes for the vias
       continue
     padtypes.append("hole")
   else:
