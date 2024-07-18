@@ -11,7 +11,7 @@ MICRO = 0.000001
 pcb = pcbnew.LoadBoard(sys.argv[1])
 
 SCREW_HOLE_RADIUS = 1.2
-SOLDER_BLOB_PADDING = 1.0
+SOLDER_BLOB_PADDING = 1.1
 
 xx = []
 yy = []
@@ -40,11 +40,11 @@ for pad in pcb.GetPads():
   comment = f"{reference}-{value}"
 
   if "SolderJumper" in description and pad.GetParent().GetLayerName() == "B.Cu":
-    padtypes.append("jumper")
+    padtypes.append(["jumper"])
   elif "CON-SMA-EDGE-S" in description:
-    padtypes.append("sma")
+    padtypes.append(["sma"])
   elif pad.GetDrillSize()[0] == 0:
-    padtypes.append("smd")
+    padtypes.append(["smd"])
   elif "MountingHole" in description or "MountingHole" in value:
 
     appended = False
@@ -53,14 +53,18 @@ for pad in pcb.GetPads():
       continue
 
     if description.startswith("Connector_Dsub") and pad.GetDrillSize()[0] <= 2000000: # Connector_Dsub:DSUB-9_Female_Horizontal_P2.77x2.84mm_EdgePinOffset4.94mm_Housed_MountingHolesOffset7.48mm
-      padtypes.append("tht")
+      padtypes.append(["tht", pad.GetDrillSize()[0]])
       appended = True
 
+    #if pad.GetDrillSize()[0] > 3000000 and not appended:
+    #  padtypes.append(["bighole", pad.GetDrillSize()[0]])
+    #  appended = True
+
     if not appended:
-      padtypes.append("hole")
+      padtypes.append(["hole"])
 
   else:
-    padtypes.append("tht")
+    padtypes.append(["tht", pad.GetDrillSize()[0]])
 
   xx.append(pad.GetCenter()[0]*MICRO)
   yy.append(-pad.GetCenter()[1]*MICRO)
@@ -93,30 +97,30 @@ if sys.stdout.isatty():
   sizes = (np.array(radiuses)*2)**2
 
   colordict = {"smd":"gray", "tht":"green", "hole":"orange", "jumper": "red", "sma": "blue"}
-  colors = [colordict[p] for p in padtypes]
+  colors = [colordict[p[0]] for p in padtypes]
 
   plt.scatter(xx,yy, s=sizes, c=colors)
   plt.show()
 
 for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes,comments):
 
-  if padtype == "smd":
+  if padtype[0] == "smd":
     continue
 
   y_corrected = y-min(yy)
 
-  if padtype == "hole":
+  if padtype[0] == "hole":
     r = SCREW_HOLE_RADIUS
     z = -5
     print("translate([%f,%f,%f]) cylinder(r=%f,h=20);"%(x,y_corrected,z,r), end="")
   else:
     color = ""
-    if padtype == "jumper":
+    if padtype[0] == "jumper":
       color = "color([1,0,0]) "
 
     ww = w+SOLDER_BLOB_PADDING
     hh = h+SOLDER_BLOB_PADDING
-    if padtype == "sma":
+    if padtype[0] == "sma":
       ww += 1
       hh += 1
     z = 5
