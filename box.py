@@ -8,6 +8,11 @@ import numpy as np
 
 MICRO = 0.000001
 
+if len(sys.argv) < 2:
+  print("Convert THT components/pads in KiCad PCB to an OpenSCAD file.")
+  print("Usage: %s <board.kicad.pcb>"%sys.argv[0])
+  sys.exit(2)
+
 pcb = pcbnew.LoadBoard(sys.argv[1])
 
 SCREW_HOLE_RADIUS = 1.2
@@ -27,8 +32,6 @@ bbox = pcb.ComputeBoundingBox()
 
 units = pcbnew.EDA_UNITS_MILLIMETRES
 uProvider = pcbnew.UNITS_PROVIDER(pcbnew.pcbIUScale, units)
-
-#from IPython import embed; embed()
 
 for pad in pcb.GetPads():
   f = pad.GetParentFootprint()
@@ -102,17 +105,39 @@ if sys.stdout.isatty():
   plt.scatter(xx,yy, s=sizes, c=colors)
   plt.show()
 
+print("pad_z = 5;")
+print("screw_z = -5;")
+
+min_yy_val = min(yy)
+
+# Add PCB outline cube
+edge_bbox = pcb.GetBoardEdgesBoundingBox()
+
+#from IPython import embed; embed()
+
+if edge_bbox.IsValid():
+    pcb_w = edge_bbox.GetWidth() * MICRO
+    pcb_h = edge_bbox.GetHeight() * MICRO
+    
+    pcb_center_x_openscad = edge_bbox.GetCenter().x * MICRO
+    pcb_center_y_openscad_inverted = -edge_bbox.GetCenter().y * MICRO
+    
+    pcb_center_y_final = pcb_center_y_openscad_inverted - min_yy_val
+    
+    print(f"// PCB Outline Cube")
+    print(f"% color([0,1,0,0.2]) translate([{pcb_center_x_openscad},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
+    print()
+
 for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes,comments):
 
   if padtype[0] == "smd":
     continue
 
-  y_corrected = y-min(yy)
+  y_corrected = y - min_yy_val
 
   if padtype[0] == "hole":
     r = SCREW_HOLE_RADIUS
-    z = -5
-    print("translate([%f,%f,%f]) cylinder(r=%f,h=20);"%(x,y_corrected,z,r), end="")
+    print("translate([%f,%f,screw_z]) cylinder(r=%f,h=20);"%(x,y_corrected,r), end="")
   else:
     color = ""
     if padtype[0] == "jumper":
@@ -123,8 +148,7 @@ for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes
     if padtype[0] == "sma":
       ww += 1
       hh += 1
-    z = 5
-    print(color + "translate([%f,%f,%f]) cube([%f,%f,5], center=true);"%(x,y_corrected,z,ww,hh), end="")
+    print(color + "translate([%f,%f,pad_z]) cube([%f,%f,5], center=true);"%(x,y_corrected,ww,hh), end="")
   print(f" // {comment}")
 
 """
