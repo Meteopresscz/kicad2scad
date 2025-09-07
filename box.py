@@ -84,10 +84,11 @@ def board_to_pads_and_holes(board_file):
 
     return pads_data, board_outline
 
-parser = argparse.ArgumentParser(description="Convert THT components/pads in KiCad PCB to an OpenSCAD file.")
+parser = argparse.ArgumentParser(description="Convert THT components/pads in KiCad PCB to an OpenSCAD file.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("board_files", nargs='+', help="Path to one or more .kicad_pcb files")
 parser.add_argument("--merge-distance", type=float, default=0.0, help="Distance (in mm) to consider pads for grouping.")
 parser.add_argument("--board-outline", action="store_true", help="Include PCB outline in the output.")
+parser.add_argument("--grouping-method", choices=['rectangle', 'hull'], default='hull', help="Method for grouping pads ('rectangle' or 'hull').")
 args = parser.parse_args()
 
 all_pads_data = []
@@ -195,23 +196,33 @@ if args.merge_distance > 0:
         if not group:
             continue
         
-        min_x = min(p['x'] - p['w']/2 for p in group)
-        max_x = max(p['x'] + p['w']/2 for p in group)
-        min_y = min(p['y'] - p['h']/2 for p in group)
-        max_y = max(p['y'] + p['h']/2 for p in group)
-        
-        center_x = (min_x + max_x) / 2
-        center_y = (min_y + max_y) / 2
-        total_w = max_x - min_x
-        total_h = max_y - min_y
-        
         comments = ", ".join(p['comment'] for p in group)
         
         color = ""
         if any(p['type'] == 'jumper' for p in group):
             color = "color([1,0,0]) "
-            
-        print(f"{color}translate([{center_x},{center_y},pad_z]) cube([{total_w},{total_h},5], center=true); // {comments}")
+        
+        if len(group) > 1:
+            if args.grouping_method == 'hull':
+                print(f"{color}hull() {{ // {comments}")
+                for pad in group:
+                    print(f"  translate([{pad['x']},{pad['y']},pad_z]) cube([{pad['w']},{pad['h']},5], center=true); // {pad['comment']}")
+                print(f"}}")
+            else: # rectangle
+                min_x = min(p['x'] - p['w']/2 for p in group)
+                max_x = max(p['x'] + p['w']/2 for p in group)
+                min_y = min(p['y'] - p['h']/2 for p in group)
+                max_y = max(p['y'] + p['h']/2 for p in group)
+                
+                center_x = (min_x + max_x) / 2
+                center_y = (min_y + max_y) / 2
+                total_w = max_x - min_x
+                total_h = max_y - min_y
+                
+                print(f"{color}translate([{center_x},{center_y},pad_z]) cube([{total_w},{total_h},5], center=true); // {comments}")
+        elif group:
+            pad = group[0]
+            print(f"{color}translate([{pad['x']},{pad['y']},pad_z]) cube([{pad['w']},{pad['h']},5], center=true); // {comments}")
 else:
     # Print individual pads without grouping
     for pad in pads_to_process:
