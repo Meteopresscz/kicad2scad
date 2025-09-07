@@ -75,6 +75,23 @@ for pad in pcb.GetPads():
   heights.append(pad.GetBoundingBox().GetHeight()*MICRO)
 
 
+edge_bbox = pcb.GetBoardEdgesBoundingBox()
+if edge_bbox.IsValid():
+    x_offset = edge_bbox.GetX() * MICRO
+    y_offset = -edge_bbox.GetBottom() * MICRO
+else:
+    # Fallback to bounding box of all pads
+    if xx:
+        x_offset = min(xx)
+        y_offset = min(yy)
+    else:
+        x_offset = 0
+        y_offset = 0
+
+xx = [x - x_offset for x in xx]
+yy = [y - y_offset for y in yy]
+
+
 if sys.stdout.isatty():
   sizes = (np.array(radiuses)*2)**2
 
@@ -87,28 +104,21 @@ if sys.stdout.isatty():
 print("pad_z = 5;")
 print("screw_z = -5;")
 
-min_yy_val = min(yy)
-
-# Add PCB outline cube
-edge_bbox = pcb.GetBoardEdgesBoundingBox()
-
 #from IPython import embed; embed()
 
 if edge_bbox.IsValid():
     pcb_w = edge_bbox.GetWidth() * MICRO
     pcb_h = edge_bbox.GetHeight() * MICRO
     
-    pcb_center_x_openscad = edge_bbox.GetCenter().x * MICRO
-    pcb_center_y_openscad_inverted = -edge_bbox.GetCenter().y * MICRO
-    
-    pcb_center_y_final = pcb_center_y_openscad_inverted - min_yy_val
+    pcb_center_x_final = pcb_w / 2
+    pcb_center_y_final = pcb_h / 2
     
     comment = ""
     if not args.board_outline:
        comment = "//"
 
     print(f"// PCB Outline Cube")
-    print(f"{comment}% color([0,1,0,0.2]) translate([{pcb_center_x_openscad},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
+    print(f"{comment}% color([0,1,0,0.2]) translate([{pcb_center_x_final},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
     print()
 
 pads_to_process = []
@@ -119,10 +129,8 @@ for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes
   if padtype[0] == "smd":
     continue
 
-  y_corrected = y - min_yy_val
-
   if padtype[0] == "hole":
-    holes_to_process.append({'x': x, 'y': y_corrected, 'comment': comment})
+    holes_to_process.append({'x': x, 'y': y, 'comment': comment})
   elif padtype[0] in ["tht", "jumper", "sma"]:
     ww = w+SOLDER_BLOB_PADDING
     hh = h+SOLDER_BLOB_PADDING
@@ -130,7 +138,7 @@ for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes
       ww += 1
       hh += 1
     pads_to_process.append({
-        'x': x, 'y': y_corrected, 'w': ww, 'h': hh,
+        'x': x, 'y': y, 'w': ww, 'h': hh,
         'comment': comment, 'type': padtype[0]
     })
 
