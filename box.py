@@ -9,90 +9,107 @@ import argparse
 
 MICRO = 0.000001
 
+def board_to_pads_and_holes(board_file):
+    pcb = pcbnew.LoadBoard(board_file)
+
+    pads_data = []
+
+    for pad in pcb.GetPads():
+      f = pad.GetParentFootprint()
+      description = f.GetLibDescription()
+
+      value = f.GetFieldByName("Value").GetText()
+      reference = f.GetFieldByName("Reference").GetText()
+      comment = f"{reference}-{value}"
+
+      pad_info = {
+          'x': pad.GetCenter()[0] * MICRO,
+          'y': -pad.GetCenter()[1] * MICRO,
+          'radius': pad.GetBoundingRadius() * MICRO,
+          'width': pad.GetBoundingBox().GetWidth() * MICRO,
+          'height': pad.GetBoundingBox().GetHeight() * MICRO,
+          'comment': comment,
+      }
+
+      padtype = []
+      if "SolderJumper" in description and pad.GetParent().GetLayerName() == "B.Cu":
+        padtype.append("jumper")
+      elif "CON-SMA-EDGE-S" in description:
+        padtype.append("sma")
+      elif pad.GetDrillSize()[0] == 0:
+        padtype.append("smd")
+      elif "MountingHole" in description or "MountingHole" in value:
+
+        if pad.GetDrillSize()[0] < 1000000: # footprints MountingHole_3.2mm_M3_Pad_Via would generate lots of small holes for the vias
+          continue
+
+        appended = False
+        if description.startswith("Connector_Dsub") and pad.GetDrillSize()[0] <= 2000000: # Connector_Dsub:DSUB-9_Female_Horizontal_P2.77x2.84mm_EdgePinOffset4.94mm_Housed_MountingHolesOffset7.48mm
+          padtype.extend(["tht", pad.GetDrillSize()[0]])
+          appended = True
+
+        if not appended:
+          padtype.append("hole")
+
+      else:
+        padtype.extend(["tht", pad.GetDrillSize()[0]])
+
+      if not padtype:
+          continue
+
+      pad_info['padtype'] = padtype
+      pads_data.append(pad_info)
+
+
+    edge_bbox = pcb.GetBoardEdgesBoundingBox()
+    board_outline = None
+    if edge_bbox.IsValid():
+        x_offset = edge_bbox.GetX() * MICRO
+        y_offset = -edge_bbox.GetBottom() * MICRO
+        pcb_w = edge_bbox.GetWidth() * MICRO
+        pcb_h = edge_bbox.GetHeight() * MICRO
+        board_outline = {'w': pcb_w, 'h': pcb_h}
+    else:
+        # Fallback to bounding box of all pads
+        if pads_data:
+            x_offset = min(p['x'] for p in pads_data)
+            y_offset = min(p['y'] for p in pads_data)
+        else:
+            x_offset = 0
+            y_offset = 0
+
+    for pad in pads_data:
+        pad['x'] -= x_offset
+        pad['y'] -= y_offset
+
+    return pads_data, board_outline
+
 parser = argparse.ArgumentParser(description="Convert THT components/pads in KiCad PCB to an OpenSCAD file.")
-parser.add_argument("board_file", help="Path to the .kicad_pcb file")
+parser.add_argument("board_files", nargs='+', help="Path to one or more .kicad_pcb files")
 parser.add_argument("--merge-distance", type=float, default=0.0, help="Distance (in mm) to consider pads for grouping.")
 parser.add_argument("--board-outline", action="store_true", help="Include PCB outline in the output.")
 args = parser.parse_args()
 
-pcb = pcbnew.LoadBoard(args.board_file)
+all_pads_data = []
+all_board_outlines = []
+
+for board_file in args.board_files:
+    pads_data, board_outline_data = board_to_pads_and_holes(board_file)
+
+    if board_outline_data:
+        all_board_outlines.append(board_outline_data)
+
+    all_pads_data.extend(pads_data)
+
 
 SCREW_HOLE_RADIUS = 1.2
 SOLDER_BLOB_PADDING = 1.1
 
-xx = []
-yy = []
-radiuses = []
-padtypes = []
-comments = []
-widths = []
-heights = []
-
-for pad in pcb.GetPads():
-  f = pad.GetParentFootprint()
-  fp = f.GetFPID().GetUniStringLibId()
-  description = f.GetLibDescription()
-
-  value = f.GetFieldByName("Value").GetText()
-  reference = f.GetFieldByName("Reference").GetText()
-  comment = f"{reference}-{value}"
-
-  if "SolderJumper" in description and pad.GetParent().GetLayerName() == "B.Cu":
-    padtypes.append(["jumper"])
-  elif "CON-SMA-EDGE-S" in description:
-    padtypes.append(["sma"])
-  elif pad.GetDrillSize()[0] == 0:
-    padtypes.append(["smd"])
-  elif "MountingHole" in description or "MountingHole" in value:
-
-    appended = False
-
-    if pad.GetDrillSize()[0] < 1000000: # footprints MountingHole_3.2mm_M3_Pad_Via would generate lots of small holes for the vias
-      continue
-
-    if description.startswith("Connector_Dsub") and pad.GetDrillSize()[0] <= 2000000: # Connector_Dsub:DSUB-9_Female_Horizontal_P2.77x2.84mm_EdgePinOffset4.94mm_Housed_MountingHolesOffset7.48mm
-      padtypes.append(["tht", pad.GetDrillSize()[0]])
-      appended = True
-
-    #if pad.GetDrillSize()[0] > 3000000 and not appended:
-    #  padtypes.append(["bighole", pad.GetDrillSize()[0]])
-    #  appended = True
-
-    if not appended:
-      padtypes.append(["hole"])
-
-  else:
-    padtypes.append(["tht", pad.GetDrillSize()[0]])
-
-  xx.append(pad.GetCenter()[0]*MICRO)
-  yy.append(-pad.GetCenter()[1]*MICRO)
-  radiuses.append(pad.GetBoundingRadius()*MICRO)
-  comments.append(comment)
-
-  #print(padtypes[-1], xx[-1], yy[-1], description, comment)
-
-  widths.append(pad.GetBoundingBox().GetWidth()*MICRO)
-  heights.append(pad.GetBoundingBox().GetHeight()*MICRO)
-
-
-edge_bbox = pcb.GetBoardEdgesBoundingBox()
-if edge_bbox.IsValid():
-    x_offset = edge_bbox.GetX() * MICRO
-    y_offset = -edge_bbox.GetBottom() * MICRO
-else:
-    # Fallback to bounding box of all pads
-    if xx:
-        x_offset = min(xx)
-        y_offset = min(yy)
-    else:
-        x_offset = 0
-        y_offset = 0
-
-xx = [x - x_offset for x in xx]
-yy = [y - y_offset for y in yy]
-
-
 if sys.stdout.isatty():
+  xx = [p['x'] for p in all_pads_data]
+  yy = [p['y'] for p in all_pads_data]
+  radiuses = [p['radius'] for p in all_pads_data]
+  padtypes = [p['padtype'] for p in all_pads_data]
   sizes = (np.array(radiuses)*2)**2
 
   colordict = {"smd":"gray", "tht":"green", "hole":"orange", "jumper": "red", "sma": "blue"}
@@ -106,40 +123,42 @@ print("screw_z = -5;")
 
 #from IPython import embed; embed()
 
-if edge_bbox.IsValid():
-    pcb_w = edge_bbox.GetWidth() * MICRO
-    pcb_h = edge_bbox.GetHeight() * MICRO
-    
-    pcb_center_x_final = pcb_w / 2
-    pcb_center_y_final = pcb_h / 2
-    
+if all_board_outlines:
     comment = ""
     if not args.board_outline:
        comment = "//"
 
     print(f"// PCB Outline Cube")
-    print(f"{comment}% color([0,1,0,0.2]) translate([{pcb_center_x_final},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
+    for board_outline in all_board_outlines:
+        pcb_w = board_outline['w']
+        pcb_h = board_outline['h']
+        
+        pcb_center_x_final = pcb_w / 2
+        pcb_center_y_final = pcb_h / 2
+        
+        print(f"{comment}% color([0,1,0,0.2]) translate([{pcb_center_x_final},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
     print()
 
 pads_to_process = []
 holes_to_process = []
 
-for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes,comments):
+for pad in all_pads_data:
+  padtype = pad['padtype']
 
   if padtype[0] == "smd":
     continue
 
   if padtype[0] == "hole":
-    holes_to_process.append({'x': x, 'y': y, 'comment': comment})
+    holes_to_process.append({'x': pad['x'], 'y': pad['y'], 'comment': pad['comment']})
   elif padtype[0] in ["tht", "jumper", "sma"]:
-    ww = w+SOLDER_BLOB_PADDING
-    hh = h+SOLDER_BLOB_PADDING
+    ww = pad['width']+SOLDER_BLOB_PADDING
+    hh = pad['height']+SOLDER_BLOB_PADDING
     if padtype[0] == "sma":
       ww += 1
       hh += 1
     pads_to_process.append({
-        'x': x, 'y': y, 'w': ww, 'h': hh,
-        'comment': comment, 'type': padtype[0]
+        'x': pad['x'], 'y': pad['y'], 'w': ww, 'h': hh,
+        'comment': pad['comment'], 'type': padtype[0]
     })
 
 # Print holes
