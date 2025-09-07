@@ -12,6 +12,7 @@ MICRO = 0.000001
 parser = argparse.ArgumentParser(description="Convert THT components/pads in KiCad PCB to an OpenSCAD file.")
 parser.add_argument("board_file", help="Path to the .kicad_pcb file")
 parser.add_argument("--merge-distance", type=float, default=0.0, help="Distance (in mm) to consider pads for grouping.")
+parser.add_argument("--board-outline", action="store_true", help="Include PCB outline in the output.")
 args = parser.parse_args()
 
 pcb = pcbnew.LoadBoard(args.board_file)
@@ -26,10 +27,6 @@ padtypes = []
 comments = []
 widths = []
 heights = []
-
-bbox = pcb.ComputeBoundingBox()
-#ic(bbox.GetHeight())
-#ic(bbox.GetOrigin())
 
 for pad in pcb.GetPads():
   f = pad.GetParentFootprint()
@@ -78,22 +75,6 @@ for pad in pcb.GetPads():
   heights.append(pad.GetBoundingBox().GetHeight()*MICRO)
 
 
-# edge
-"""
-for d in pcb.GetDrawings():
-  #print(d.GetLayerName())
-  if (d.GetLayerName() == 'F.Cu'):
-    fcu = d
-  if (d.GetLayerName() == 'Edge.Cuts'):
-    fe = d
-ex = fcu.GetCenter()[0]*MICRO
-ey = -fcu.GetCenter()[1]*MICRO
-ew = fe.GetBoundingBox().GetWidth()*MICRO
-eh = fcu.GetBoundingBox().GetHeight()*MICRO
-"""
-#print(ew, eh)
-#sys.exit(0)
-
 if sys.stdout.isatty():
   sizes = (np.array(radiuses)*2)**2
 
@@ -122,8 +103,12 @@ if edge_bbox.IsValid():
     
     pcb_center_y_final = pcb_center_y_openscad_inverted - min_yy_val
     
+    comment = ""
+    if not args.board_outline:
+       comment = "//"
+
     print(f"// PCB Outline Cube")
-    print(f"//% color([0,1,0,0.2]) translate([{pcb_center_x_openscad},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
+    print(f"{comment}% color([0,1,0,0.2]) translate([{pcb_center_x_openscad},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
     print()
 
 pads_to_process = []
