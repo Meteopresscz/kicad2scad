@@ -30,13 +30,10 @@ bbox = pcb.ComputeBoundingBox()
 #ic(bbox.GetHeight())
 #ic(bbox.GetOrigin())
 
-units = pcbnew.EDA_UNITS_MILLIMETRES
-uProvider = pcbnew.UNITS_PROVIDER(pcbnew.pcbIUScale, units)
-
 for pad in pcb.GetPads():
   f = pad.GetParentFootprint()
-  fp = f.GetFieldByName("Footprint")
-  description = fp.GetText()
+  fp = f.GetFPID().GetUniStringLibId()
+  description = f.GetLibDescription()
 
   value = f.GetFieldByName("Value").GetText()
   reference = f.GetFieldByName("Reference").GetText()
