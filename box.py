@@ -4,16 +4,17 @@ import sys
 import pcbnew
 import matplotlib.pyplot as plt
 import numpy as np
+import argparse
 #from icecream import ic
 
 MICRO = 0.000001
 
-if len(sys.argv) < 2:
-  print("Convert THT components/pads in KiCad PCB to an OpenSCAD file.")
-  print("Usage: %s <board.kicad.pcb>"%sys.argv[0])
-  sys.exit(2)
+parser = argparse.ArgumentParser(description="Convert THT components/pads in KiCad PCB to an OpenSCAD file.")
+parser.add_argument("board_file", help="Path to the .kicad_pcb file")
+parser.add_argument("--merge-distance", type=float, default=0.0, help="Distance (in mm) to consider pads for grouping.")
+args = parser.parse_args()
 
-pcb = pcbnew.LoadBoard(sys.argv[1])
+pcb = pcbnew.LoadBoard(args.board_file)
 
 SCREW_HOLE_RADIUS = 1.2
 SOLDER_BLOB_PADDING = 1.1
@@ -122,8 +123,11 @@ if edge_bbox.IsValid():
     pcb_center_y_final = pcb_center_y_openscad_inverted - min_yy_val
     
     print(f"// PCB Outline Cube")
-    print(f"% color([0,1,0,0.2]) translate([{pcb_center_x_openscad},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
+    print(f"//% color([0,1,0,0.2]) translate([{pcb_center_x_openscad},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
     print()
+
+pads_to_process = []
+holes_to_process = []
 
 for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes,comments):
 
@@ -133,34 +137,74 @@ for x,y,radius,w,h,padtype,comment in zip(xx,yy,radiuses,widths,heights,padtypes
   y_corrected = y - min_yy_val
 
   if padtype[0] == "hole":
-    r = SCREW_HOLE_RADIUS
-    print("translate([%f,%f,screw_z]) cylinder(r=%f,h=20);"%(x,y_corrected,r), end="")
-  else:
-    color = ""
-    if padtype[0] == "jumper":
-      color = "color([1,0,0]) "
-
+    holes_to_process.append({'x': x, 'y': y_corrected, 'comment': comment})
+  elif padtype[0] in ["tht", "jumper", "sma"]:
     ww = w+SOLDER_BLOB_PADDING
     hh = h+SOLDER_BLOB_PADDING
     if padtype[0] == "sma":
       ww += 1
       hh += 1
-    print(color + "translate([%f,%f,pad_z]) cube([%f,%f,5], center=true);"%(x,y_corrected,ww,hh), end="")
-  print(f" // {comment}")
+    pads_to_process.append({
+        'x': x, 'y': y_corrected, 'w': ww, 'h': hh,
+        'comment': comment, 'type': padtype[0]
+    })
 
-"""
-bbox = pcb.GetBoard().GetBoundingBox()
-print("%%translate([%f,%f,4]) cube([%f,%f,10], center=true);"%(
-  bbox.GetCenter()[0]*MICRO,
-  bbox.GetCenter()[1]*MICRO,
-  bbox.GetWidth()*MICRO,
-  bbox.GetHeight()*MICRO
-))
-"""
+# Print holes
+for hole in holes_to_process:
+    r = SCREW_HOLE_RADIUS
+    print(f"translate([{hole['x']},{hole['y']},screw_z]) cylinder(r={r},h=20); // {hole['comment']}")
 
-"""
-print("%%translate([%f,%f,4]) cube([%f,%f,10], center=true);"%(
-  ex, ey, eh, ew
-))
-"""
+# Group and print THT-like pads
+if args.merge_distance > 0:
+    MERGE_DISTANCE = args.merge_distance # mm
+
+    groups = []
+    while pads_to_process:
+        current_group = []
+        queue = [pads_to_process.pop(0)]
+        
+        while queue:
+            pad1 = queue.pop(0)
+            current_group.append(pad1)
+            
+            remaining_pads = []
+            for pad2 in pads_to_process:
+                is_close = (abs(pad1['x'] - pad2['x']) * 2 < (pad1['w'] + pad2['w'] + MERGE_DISTANCE) and
+                            abs(pad1['y'] - pad2['y']) * 2 < (pad1['h'] + pad2['h'] + MERGE_DISTANCE))
+                
+                if is_close:
+                    queue.append(pad2)
+                else:
+                    remaining_pads.append(pad2)
+            pads_to_process = remaining_pads
+        groups.append(current_group)
+
+    for group in groups:
+        if not group:
+            continue
+        
+        min_x = min(p['x'] - p['w']/2 for p in group)
+        max_x = max(p['x'] + p['w']/2 for p in group)
+        min_y = min(p['y'] - p['h']/2 for p in group)
+        max_y = max(p['y'] + p['h']/2 for p in group)
+        
+        center_x = (min_x + max_x) / 2
+        center_y = (min_y + max_y) / 2
+        total_w = max_x - min_x
+        total_h = max_y - min_y
+        
+        comments = ", ".join(p['comment'] for p in group)
+        
+        color = ""
+        if any(p['type'] == 'jumper' for p in group):
+            color = "color([1,0,0]) "
+            
+        print(f"{color}translate([{center_x},{center_y},pad_z]) cube([{total_w},{total_h},5], center=true); // {comments}")
+else:
+    # Print individual pads without grouping
+    for pad in pads_to_process:
+        color = ""
+        if pad['type'] == 'jumper':
+            color = "color([1,0,0]) "
+        print(f"{color}translate([{pad['x']},{pad['y']},pad_z]) cube([{pad['w']},{pad['h']},5], center=true); // {pad['comment']}")
 
