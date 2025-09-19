@@ -102,6 +102,8 @@ for board_file in args.board_files:
 
     all_pads_data.extend(pads_data)
 
+param_comment = f"// Generated with command: {' '.join(sys.argv)}"
+print(param_comment)
 
 SCREW_HOLE_RADIUS = 1.2
 SOLDER_BLOB_PADDING = 1.1
