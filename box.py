@@ -89,6 +89,8 @@ parser.add_argument("board_files", nargs='+', help="Path to one or more .kicad_p
 parser.add_argument("--merge-distance", type=float, default=0.0, help="Distance (in mm) to consider pads for grouping.")
 parser.add_argument("--board-outline", action="store_true", help="Include PCB outline in the output.")
 parser.add_argument("--grouping-method", choices=['rectangle', 'hull'], default='hull', help="Method for grouping pads ('rectangle' or 'hull').")
+parser.add_argument("--pad-z", type=float, default=5, help="Z coordinate for pads.")
+parser.add_argument("--screw-z", type=float, default=-5, help="Z coordinate for screw holes.")
 args = parser.parse_args()
 
 all_pads_data = []
@@ -121,8 +123,8 @@ if sys.stdout.isatty():
   plt.scatter(xx,yy, s=sizes, c=colors)
   plt.show()
 
-print("pad_z = 5;")
-print("screw_z = -5;")
+print(f"pad_z = {args.pad_z};")
+print(f"screw_z = {args.screw_z};")
 
 #from IPython import embed; embed()
 
