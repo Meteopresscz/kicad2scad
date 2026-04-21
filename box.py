@@ -141,7 +141,7 @@ if all_board_outlines:
         pcb_center_x_final = pcb_w / 2
         pcb_center_y_final = pcb_h / 2
         
-        print(f"{comment}% color([0,1,0,0.2]) translate([{pcb_center_x_final},{pcb_center_y_final},5]) cube([{pcb_w},{pcb_h},5], center=true);")
+        print(f"{comment}% color([0,1,0,0.2]) translate([{pcb_center_x_final:.3f},{pcb_center_y_final:.3f},5]) cube([{pcb_w:.3f},{pcb_h:.3f},5], center=true);")
     print()
 
 pads_to_process = []
@@ -169,7 +169,7 @@ for pad in all_pads_data:
 # Print holes
 for hole in holes_to_process:
     r = SCREW_HOLE_RADIUS
-    print(f"translate([{hole['x']},{hole['y']},screw_z]) cylinder(r={r},h=20); // {hole['comment']}")
+    print(f"translate([{hole['x']:.3f},{hole['y']:.3f},screw_z]) cylinder(r={r},h=20); // {hole['comment']}")
 
 # Group and print THT-like pads
 if args.merge_distance > 0:
@@ -210,7 +210,7 @@ if args.merge_distance > 0:
             if args.grouping_method == 'hull':
                 print(f"{color}hull() {{ // {comments}")
                 for pad in group:
-                    print(f"  translate([{pad['x']},{pad['y']},pad_z]) cube([{pad['w']},{pad['h']},5], center=true); // {pad['comment']}")
+                    print(f"  translate([{pad['x']:.3f},{pad['y']:.3f},pad_z]) cube([{pad['w']:.3f},{pad['h']:.3f},5], center=true); // {pad['comment']}")
                 print(f"}}")
             else: # rectangle
                 min_x = min(p['x'] - p['w']/2 for p in group)
@@ -223,15 +223,15 @@ if args.merge_distance > 0:
                 total_w = max_x - min_x
                 total_h = max_y - min_y
                 
-                print(f"{color}translate([{center_x},{center_y},pad_z]) cube([{total_w},{total_h},5], center=true); // {comments}")
+                print(f"{color}translate([{center_x:.3f},{center_y:.3f},pad_z]) cube([{total_w:.3f},{total_h:.3f},5], center=true); // {comments}")
         elif group:
             pad = group[0]
-            print(f"{color}translate([{pad['x']},{pad['y']},pad_z]) cube([{pad['w']},{pad['h']},5], center=true); // {comments}")
+            print(f"{color}translate([{pad['x']:.3f},{pad['y']:.3f},pad_z]) cube([{pad['w']:.3f},{pad['h']:.3f},5], center=true); // {comments}")
 else:
     # Print individual pads without grouping
     for pad in pads_to_process:
         color = ""
         if pad['type'] == 'jumper':
             color = "color([1,0,0]) "
-        print(f"{color}translate([{pad['x']},{pad['y']},pad_z]) cube([{pad['w']},{pad['h']},5], center=true); // {pad['comment']}")
+        print(f"{color}translate([{pad['x']:.3f},{pad['y']:.3f},pad_z]) cube([{pad['w']:.3f},{pad['h']:.3f},5], center=true); // {pad['comment']}")
 
